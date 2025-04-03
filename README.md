@@ -192,4 +192,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-Created by [Your Name](https://github.com/nullstead) - feel free to contact me!
+Created by [Kponyo JDK](https://github.com/nullstead) - feel free to contact me!
