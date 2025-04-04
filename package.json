@@ -11,7 +11,7 @@
   },
   "name": "to-dynamodb-do",
   "version": "1.0.0",
-  "description": "A complete task management application built using Node.js, Express, EJS templating, and Amazon DynamoDB. This application follows the MVC (Model-View-Controller) architecture pattern and provides a comprehensive, responsive UI for managing your todo items.",
+  "description": "A task management application built using Node.js, Express, EJS templating, and Amazon DynamoDB. This application follows the MVC (Model-View-Controller) architecture pattern and provides a comprehensive, responsive UI for managing your todo items.",
   "main": "app.js",
   "devDependencies": {},
   "scripts": {
