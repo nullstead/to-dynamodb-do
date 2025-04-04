@@ -2,7 +2,7 @@
 
 A complete task management application built using Node.js, Express, EJS templating, and Amazon DynamoDB. This application follows the MVC (Model-View-Controller) architecture pattern and provides a comprehensive, responsive UI for managing your todo items.
 
-![Todo App Screenshot](https://placeholder-image.com/todo-app-screenshot.png)
+![Todo App Screenshot](./App-screenshot.png)
 
 ## Features
 
