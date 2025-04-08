@@ -1,0 +1,110 @@
+name: Blue-Green Deployment to ECS
+
+on:
+  repository_dispatch:
+    types: [trigger-deployment]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy'
+        required: true
+        default: ''
+
+jobs:
+  deploy:
+    name: Deploy to ECS with Blue-Green strategy
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ secrets.AWS_REGION }}
+
+    - name: Update task definition with new image
+      run: |
+        # Get task definition
+        aws ecs describe-task-definition \
+          --task-definition todo-app-task \
+          --query 'taskDefinition' > task-def.json
+        
+        # Update container image
+        ECR_REGISTRY="public.ecr.aws/u1k7f1w4"
+        ECR_REPOSITORY="to-do-app"
+        SHA="${{ github.event.client_payload.sha || github.event.inputs.sha }}"
+        VERSION_TAG=${SHA::8}
+        NEW_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG"
+        
+        # Replace the image in the task definition
+        sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|g" task-def.json
+        
+        # Register the new task definition
+        NEW_TASK_DEF=$(aws ecs register-task-definition \
+          --cli-input-json file://task-def.json \
+          --query 'taskDefinition.taskDefinitionArn' --output text)
+        
+        echo "NEW_TASK_DEF=$NEW_TASK_DEF" >> $GITHUB_ENV
+
+    - name: Get latest Task Definition ARN
+      id: get-task-def
+      run: |
+          TASK_DEF_ARN=$(aws ecs describe-task-definition --task-definition todo-app-task --query "taskDefinition.taskDefinitionArn" --region ${{ secrets.AWS_REGION }} --output text)
+          echo "TASK_DEF_ARN=$TASK_DEF_ARN" >> $GITHUB_ENV
+    
+    - name: Create appspec.yaml
+      run: |
+          cat <<EOF > appspec.yaml
+          version: 0.0
+          Resources:
+            - TargetService:
+                Type: AWS::ECS::Service
+                Properties:
+                    TaskDefinition: ${{ env.TASK_DEF_ARN }}
+                    LoadBalancerInfo:
+                        ContainerName: todo-app
+                        ContainerPort: 3000
+          EOF
+    
+    - name: Upload appspec.yaml to S3
+      run: |
+          aws s3 cp appspec.yaml s3://todoapp-appspec-bkt/appspec.yaml
+    
+    - name: Trigger Blue-Green Deployment
+      run: |
+          aws deploy create-deployment \
+          --application-name AppECS-todo-app-cluster-todo-app-service \
+          --deployment-group-name DgpECS-todo-app-cluster-todo-app-service \
+          --revision 'revisionType=S3,s3Location={bucket="todoapp-appspec-bkt",key="appspec.yaml",bundleType="YAML"}' \
+          --region ${{ secrets.AWS_REGION }}
+    
+    - name: Wait for deployment to complete
+      run: |
+        # Get deployment ID from the previous step
+        DEPLOYMENT_ID=$(aws deploy list-deployments \
+          --application-name AppECS-todo-app-cluster-todo-app-service \
+          --deployment-group-name DgpECS-todo-app-cluster-todo-app-service \
+          --query 'deployments[0]' --output text)
+        
+        echo "Waiting for deployment $DEPLOYMENT_ID to complete..."
+        
+        # Poll deployment status
+        while true; do
+          STATUS=$(aws deploy get-deployment \
+            --deployment-id $DEPLOYMENT_ID \
+            --query 'deploymentInfo.status' --output text)
+          
+          echo "Current deployment status: $STATUS"
+          
+          if [ "$STATUS" == "Succeeded" ]; then
+            echo "Deployment succeeded!"
+            break
+          elif [ "$STATUS" == "Failed" ] || [ "$STATUS" == "Stopped" ]; then
+            echo "Deployment failed or was stopped."
+            exit 1
+          fi
+          
+          echo "Waiting for deployment to complete..."
+          sleep 30
+        done

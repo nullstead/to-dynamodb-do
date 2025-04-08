@@ -1,4 +1,4 @@
-name: Build, Push to ECR, and Blue-Green Deploy
+name: Build, Push to ECR, and Trigger Blue-Green Deploy
 
 on:
   push:
