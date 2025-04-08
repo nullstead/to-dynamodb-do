@@ -25,26 +25,26 @@ jobs:
 
     - name: Update task definition with new image
       run: |
-        # Get task definition
+        # Get task definition but filter out read-only fields
         aws ecs describe-task-definition \
           --task-definition todo-app-task \
-          --query 'taskDefinition' > task-def.json
-        
+          --query 'taskDefinition.{containerDefinitions:containerDefinitions,family:family,taskRoleArn:taskRoleArn,executionRoleArn:executionRoleArn,networkMode:networkMode,volumes:volumes,placementConstraints:placementConstraints,requiresCompatibilities:requiresCompatibilities,cpu:cpu,memory:memory,tags:tags,pidMode:pidMode,ipcMode:ipcMode,proxyConfiguration:proxyConfiguration,inferenceAccelerators:inferenceAccelerators,ephemeralStorage:ephemeralStorage,runtimePlatform:runtimePlatform,enabledFaultInjection:enabledFaultInjection}' > task-def.json
+
         # Update container image
         ECR_REGISTRY="public.ecr.aws/u1k7f1w4"
         ECR_REPOSITORY="to-do-app"
         SHA="${{ github.event.client_payload.sha || github.event.inputs.sha }}"
         VERSION_TAG=${SHA::8}
         NEW_IMAGE="$ECR_REGISTRY/$ECR_REPOSITORY:$VERSION_TAG"
-        
-        # Replace the image in the task definition
-        sed -i "s|\"image\": \".*\"|\"image\": \"$NEW_IMAGE\"|g" task-def.json
-        
+
+        # Replace the image in the container definition
+        jq --arg NEW_IMAGE "$NEW_IMAGE" '.containerDefinitions[0].image = $NEW_IMAGE' task-def.json > updated-task-def.json
+
         # Register the new task definition
         NEW_TASK_DEF=$(aws ecs register-task-definition \
-          --cli-input-json file://task-def.json \
+          --cli-input-json file://updated-task-def.json \
           --query 'taskDefinition.taskDefinitionArn' --output text)
-        
+
         echo "NEW_TASK_DEF=$NEW_TASK_DEF" >> $GITHUB_ENV
 
     - name: Get latest Task Definition ARN
