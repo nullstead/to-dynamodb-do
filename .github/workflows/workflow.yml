@@ -1,4 +1,4 @@
-name: Build and Push to ECR
+name: Build, Push to ECR, and Blue-Green Deploy
 
 on:
   push:
@@ -47,4 +47,10 @@ jobs:
         
         echo "::set-output name=image::$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-# End
+    # Trigger deployment workflow
+    - name: Trigger Blue-Green Deployment
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.REPO_ACCESS_TOKEN }}
+        event-type: trigger-deployment
+        client-payload: '{"sha": "${{ github.sha }}"}'
